@@ -1,0 +1,70 @@
+'''
+This program extracts Microsoft Excel CSV databases from a folder created by the user 
+that saves the new data to a selected folder directory chosen by the user. Databases
+are created for every vehicle based on their make. These classifications are matched 
+to determine the total registrations across the every zip code in the country for a 
+particular vehicle make over the course of the years that they appear in with every 
+file found in the input_registration_folder. 
+'''
+
+from pathlib import Path
+import pandas as pd
+
+# --- Paths ---
+input_registration_folder = Path(r"C:\Software Systems Capstone\Registration Data Downloads (Zip)")
+output_folder_path = Path(r"C:\Software Systems Capstone\Registration files (State) - Combined")
+
+def process_all_files(input_registration_folder, output_folder_path):
+    output_folder_path.mkdir(parents=True, exist_ok=True)
+
+    # Dictionary to accumulate data per vehicle make
+    make_data = {}
+
+    for file_path in input_registration_folder.iterdir():
+        if not file_path.is_file() or file_path.suffix.lower() != ".csv":
+            continue
+
+        print(f"Processing {file_path.name}...")
+
+        # Read CSV
+        df = pd.read_csv(file_path, dtype=str)
+
+        # Ensure required columns exist
+        required = ["State", "ZIP Code", "Vehicle Make", "Registration Date", "Vehicle Count"]
+        if not all(col in df.columns for col in required):
+            print(f"Skipping {file_path.name} – missing required columns")
+            continue
+
+        # Extract Year from Registration Date
+        df["Year"] = pd.to_datetime(df["Registration Date"], errors="coerce").dt.year
+        df = df.dropna(subset=["Year"])
+        df["Year"] = df["Year"].astype(int)
+
+        # Convert Vehicle Count to numeric
+        df["Vehicle Count"] = pd.to_numeric(df["Vehicle Count"], errors="coerce").fillna(0)
+
+        # Group by State, Vehicle Make, and Year
+        grouped = df.groupby(["State", "Vehicle Make", "Year"], as_index=False)["Vehicle Count"].sum()
+
+        # Accumulate data for each make
+        for make, group in grouped.groupby("Vehicle Make"):
+            if make not in make_data:
+                make_data[make] = group.copy()
+            else:
+                make_data[make] = pd.concat([make_data[make], group])
+                make_data[make] = make_data[make].groupby(["State", "Vehicle Make", "Year"], as_index=False)["Vehicle Count"].sum()
+
+    # Save one CSV per vehicle make
+    for make, data in make_data.items():
+        pivoted = data.pivot(index="State", columns="Year", values="Vehicle Count").fillna(0)
+        pivoted = pivoted.sort_index(axis=1)  # sort years
+        pivoted.reset_index(inplace=True)
+
+        output_name = f"{make}_Registrations.csv"
+        outpath = output_folder_path / output_name
+        pivoted.to_csv(outpath, index=False)
+        print(f"Saved {outpath}")
+
+    print("✅ All files processed successfully.")
+
+process_all_files(input_registration_folder, output_folder_path)
