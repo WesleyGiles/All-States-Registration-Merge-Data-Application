@@ -65,6 +65,6 @@ def process_all_files(input_registration_folder, output_folder_path):
         pivoted.to_csv(outpath, index=False)
         print(f"Saved {outpath}")
 
-    print("✅ All files processed successfully.")
+    print("All files processed successfully.")
 
 process_all_files(input_registration_folder, output_folder_path)
